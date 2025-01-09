@@ -1,0 +1,146 @@
+<h1 align="center">
+AerialROITailor
+</h1>
+<h3 align="center">
+Generate virtual cameras of ROI from aerial oblique imagery
+</h3>
+
+![流程](assets/frame.png)
+从大型航空倾斜摄影数据集中，选择感兴趣区域 (ROI)，生成ROI数据集和相应的虚拟相机参数，以便用于区域性的场景建模。
+符合现有的NeRF、Instant-NGP等模型的输入要求。
+## 原理
+### 1.可见性筛选  
+* 通过比较相机朝向 $c_o$ 和相机中心c同兴趣区世界点p的连线 $c_p$ 之间的角度 $\beta$ 和相机视场角 $fov$ 的大小，来确定兴趣区的世界点是否在图像中可见。
+  $$\beta = \frac{c\_p* c\_o}{||c\_p||* ||c\_o||}$$
+  $$fov = arctan\frac{sensor\_size}{2focal}$$
+  $$if \beta < fov/2 => visiable$$
+* 如果感兴趣区域世界点在图像中的可见比例超过预设的阈值，则认为该图像是我们需要的，就将其筛选出来。
+### 2.基于包围盒的裁剪
+* 在经过可见性筛选后，为了专注于ROI，减少其他无关部分的干扰，基于像点-世界点之间的关系，通过相机的外部（w2c）和内部（c2p）参数，计算可见部分的边界框，并根据边界框裁剪图像。对影像的缩放和裁剪操作，会改变相机的内参。缩放影响的是像主点坐标和焦距，裁剪只影响像主点坐标。并采用如下图所示的策略，确保裁剪后的图像具有相同的尺寸。
+![裁剪](assets/crop.png)
+### 3.生成相机参数文件 (.json)
+* 参考了nerf_studio和instant_ngp的输入数据格式，支持多相机。
+```
+{
+  "camera_mode": ,
+  "camera_orientation": ,
+  "aabb_scale": ,
+  "aabb_range":,
+  "sphere_center":，
+  "sphere_radius":，
+  "frames": [
+  {
+    "file_path": ,
+    "intrinsic_matrix": ,
+    "transform_matrix": ,
+    "w": ,
+    "h": 
+  }, 
+  ...
+ }
+```
+## 使用方法
+### 0.环境配置
+```
+conda env create -f environment.yaml
+```
+### 1.基于Context Capture制作数据集
+* 下载大型航空倾斜摄影数据集。
+  示例：EuroSDR Benchmark for Multi-Platform Photogrammetry published by ISPRS。
+  [链接](https://www2.isprs.org/commissions/comm2/icwg-2-1a/benchmark_main/)
+* 在Context Capture Master中创建新项目，加载数据集并执行空三解算（如果数据质量很好，可以跳过刺点）。
+* 导出相机参数文件（AT.xml）和去畸变的图像。在导出空三解算后的相机参数时，注意选择坐标轴朝向为`opencv`格式（即`xyz-RDF`）。在空三解算后导出的相机参数文件中，旋转矩阵是w2c矩阵，相机中心坐标是相机在世界坐标系中的坐标。
+* 创建 reconstruction项目，选择感兴趣区域，生成mesh文件（Model.obj）和元数据文件（metadata.xml）。
+### 2.按照格式组织数据
+* 在本项目的目录中创建一个`dataset`文件夹，并按照如下格式组织：
+```
+dataset
+|_ dataset_01
+   |_ images        // 存放可见影像(empty)
+   |_ images_crop   // 存放按照ROI裁剪后的可见影像(empty)
+   |_ AT.xml        // 相机空三文件
+   |_ metadata.xml  // 感兴趣区域元数据文件
+   |_ Model.obj     // 感兴趣区域mesh文件
+```
+### 3.参数设置
+在`config.py`中设置：
+#### 数据集相关
+* 数据集路径 `dataset_dir`
+#### 输出影像相关
+* 是否按照包围盒裁剪图像 `if_mask_crop`。如果是则输出裁剪后的影像，否则输出包含ROI的原始影像。
+* 指定裁剪后统一的图像尺寸 `tar_size_w` `tar_size_h`。
+#### 虚拟相机参数相关
+* 是否对场景进行标准化 `if_standardization`。如果是，则会对整个场景进行平移和缩放：将坐标原点移动到mesh的几何中心；将整个场景缩放到一个目标球体之内。
+* 目标球体半径 `tar_radius`。
+
+### 4.运行
+* 完成数据集制作和参数设置后，运行`run.py`。  
+* 若查看处理后的场景可视化结果，运行`scene_viser.py`。
+
+### 5.预期结果
+```
+dataset
+|_ dataset_01
+   |_ images        // 存放可见影像
+   |_ images_crop   // 存放按照ROI裁剪后的可见影像
+   |_ AT.xml        // 相机空三文件
+   |_ metadata.xml  // 感兴趣区域元数据文件
+   |_ Model.obj     // 感兴趣区域mesh文件
+   |_ transforms.json   // 相机参数文件
+   |_ Model_resized.obj  // 标准化后的mesh文件
+```
+## 测试
+* 数据集：  
+ISPRS Penta-Cam-Centre(8bit)
+* 参数设置：  
+`if_mask_crop`=True, `if_standardization`=True, `tar_size_w`=1200, `tar_size_h`=1000，`tar_radius`=1.0
+* 经CC三维重建导出的兴趣区mesh： ![图像](assets/roi_mesh.jpg)
+* 筛选出包含感兴趣区域的影像（8176 * 6132）![图像](assets/selected_images.jpg)
+* 依据包围盒将该影像中的ROI裁剪出来，输出新影像（1200 * 1000） ![图像](assets/croped_images.jpg)
+* 同时获取新图像的相机参数：
+```
+{
+  "camera_mode": "Perspective",
+  "camera_orientation": "XRightYDown",
+  "aabb_scale": 1.0,
+  "aabb_range": [
+    [-0.6599620197815109, 0.6599620197815114],
+    [-0.7196484545274785, 0.719648454527478],
+    [-0.21576893738933003, 0.21576893738932795]
+  ],
+  "sphere_center": [0, 0, 0],
+  "sphere_radius": 1.0,
+  "frames": [
+    {
+      "file_path": "images/001_009_145000282.jpg",
+      "intrinsic_matrix": [
+        [13658.7021484375, 0.0, -2580.524169921875],
+        [0.0, 13658.7021484375, 323.05224609375],
+        [0.0, 0.0, 1.0]
+      ],
+      "transform_matrix": [
+        [0.9999997615814209,0.00018038207781501114,-0.0006661160150542855,-3.903818368911743],
+        [0.0006009129574522376,-0.7022261023521423,0.7119537591934204,-11.74245548248291],
+        [-0.0003393403603695333,-0.7119539976119995,-0.7022260427474976,11.748698234558105],
+        [0.0, 0.0, 0.0, 1.0]
+      ],
+      "w": 1200,
+      "h": 1000
+    },
+    ...
+}
+```
+* 可视化处理后的场景：红色为相机视锥体，蓝色为场景包围球。
+ ![图像](assets/vis.jpg)
+
+## 待办
+- [x] 支持 自动识别单相机/多相机
+- [x] 支持 场景可视化
+- [x] 优化 代码结构
+- [ ] 支持 处理畸变影像，不再用CC导出
+
+## 参考
+感谢以下项目：
+* 数据集: [链接](https://www2.isprs.org/commissions/comm2/icwg-2-1a/benchmark_main/)
+* 相机可视化: [NeRF++](https://github.com/Kai-46/nerfplusplus)
+* json格式：[nerfstudio](https://github.com/nerfstudio-project/nerfstudio) [Neuralangelo](https://github.com/NVlabs/neuralangelo) 
