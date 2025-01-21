@@ -12,7 +12,7 @@ from utils import get_scene_box
 
 class SceneReader(object):
     def __init__(self, obj, xml):
-        """由感兴趣区域mesh文件及元数据文件获取感兴趣场景信息"""
+        """get the scene information of the ROI by parsing .obj file and the metadata of mesh"""
         self.srs_origin = None
         self.srs = None
         self.mesh_obj_path = obj
@@ -20,7 +20,7 @@ class SceneReader(object):
         self.get_srs()
 
     def get_srs(self):
-        """获取mesh的参考坐标系以及中心坐标"""
+        """get the reference coordinate system and center coordinate of the mesh"""
         with open(self.mesh_xml_path, 'r') as f:
             mesh_xml = xmltodict.parse(f.read())
         model_meta = mesh_xml['ModelMetadata']
@@ -34,14 +34,14 @@ class SceneReader(object):
 
     def get_3d_points(self):
         """
-        获取mesh世界点坐标
-        vertex/顶点坐标/np.array(N,3)
+        get the vertex(world coordinates) of the mesh
+        note: vertex/np.array(N,3)
         """
         _v = []
         for line in open(self.mesh_obj_path, 'r'):
             line = line.split(' ')
             if line[0] == 'v':
-                # 注意这里，obj保存的顶点的坐标是相对于中心点的坐标，要还原
+                # note: the vertex coordinates saved in obj are relative to the center point coordinates, so need to be restored
                 v = np.array([float(line[1]) + self.srs_origin[0],
                               float(line[2]) + self.srs_origin[1],
                               float(line[3]) + self.srs_origin[2]])
@@ -51,9 +51,7 @@ class SceneReader(object):
 
     def centered_and_scaled_3d_points(self, output_path):
         """
-        将mesh点坐标中心化、规范化之后输出
-        :param output_path: 输出mesh文件路径
-        :return: 在指定路径生成mesh
+        centered and scaled 3d points of the mesh, and then save it to a new path
         """
         _v = []
         _vt = []

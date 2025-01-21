@@ -13,9 +13,9 @@ from tqdm import tqdm
 
 def get_scene_box(p_world, tar_radius=1.0):
     """
-    获取包围盒
-    :param p_world: 兴趣区世界点坐标 / np.array(N,3)
-    :param tar_radius: 前景球体半径 / float / 默认为1.0
+    get scene bounding box
+    :param p_world/ np.array(N,3)
+    :param tar_radius/ float
     :return: bounding_box, center, radius, scale
     """
     x_min, x_max = np.min(p_world[:, 0]), np.max(p_world[:, 0])
@@ -39,17 +39,17 @@ def get_scene_box(p_world, tar_radius=1.0):
     return output
 
 
-def get_required_img_path(ori_img_path, use_img_id, tar_folder):
+def get_target_img_path(ori_img_path, tar_img_id, tar_folder):
     """
-    获取感兴趣影像的新老地址
-    :param ori_img_path: 原始影像路径 / list[str]
-    :param use_img_id: 感兴趣影像id / list[int]
-    :param tar_folder: 目标文件夹 / str
+    get new and old path of target images
+    :param ori_img_path / list[str]
+    :param tar_img_id / list[int]
+    :param tar_folder / str
     :return:  new_path / list[str], old_path / list[str]
     """
     new_path = []
-    old_path = [ori_img_path[i] for i in use_img_id]
-    for i in range(0, len(use_img_id)):
+    old_path = [ori_img_path[i] for i in tar_img_id]
+    for i in range(0, len(tar_img_id)):
         img_name = old_path[i].split("\\")[-1]
         tar_path = os.path.join(tar_folder, img_name)
         new_path.append(tar_path)
@@ -58,28 +58,27 @@ def get_required_img_path(ori_img_path, use_img_id, tar_folder):
 
 def move_images(old_path, new_path):
     """
-    将感兴趣影像移动到新文件夹下
+    move target images into target folder
     :param old_path: list[str]
     :param new_path: list[str]
-    :return:
     """
-    print("move required images into target folder")
+    print("move target images into target folder")
     for i in tqdm(range(0, len(old_path))):
         shutil.copy(old_path[i], new_path[i])
 
 
-def get_use_img(rot, c_world, p_world, threshold, cover_ratio):
+def select_target_images(rot, c_world, p_world, threshold, cover_ratio):
     """
-    挑选出感兴趣区的影像
-    :param rot: c2w矩阵 / np.array(n,3,3)
-    :param c_world: 相机世界坐标 / np.array(n,3)
-    :param p_world: 兴趣区世界点坐标 / np.array(N,3)
-    :param threshold: 相机的视场角，用来判断世界点相对于某张影像是否可视 / np.array(n)
-    :param cover_ratio: 当兴趣区的可视点大于一定比例，认为该图片符合要求 / float
-    :return: use_img_id : 感兴趣影像id / list[int]
+    select target images according to the visibility of ROI
+    :param rot: rotation matrix from cam to world / np.array(n,3,3)
+    :param c_world: world coordinates of cams / np.array(n,3)
+    :param p_world: world coordinates of roi 3dpoints / np.array(N,3)
+    :param threshold: the half of cameras' fov / np.array(n)
+    :param cover_ratio: the minimum acceptable ratio of visible roi 3dpoints/ float
+    :return: target_img_id : the index of target images / list[int]
     """
     print("detect required images")
-    use_img_id = []
+    target_img_id = []
     c_orient = rot[:, :, 2]  # np.array(img_num, 3)
     for i in tqdm(range(0, np.size(c_world, 0))):
         t = threshold[i]
@@ -93,13 +92,13 @@ def get_use_img(rot, c_world, p_world, threshold, cover_ratio):
 
         angle = np.arccos(cos_angle)  # between the vector 'cam->o' and 'cam->p'
         if np.sum(angle <= t) > (cover_ratio * len(p_world)):
-            use_img_id.append(i)
+            target_img_id.append(i)
 
-    return use_img_id
+    return target_img_id
 
 
 def count_str_occurrences(txt_path, search_string):
-    """统计字符出现次数"""
+    """get the count of a string in a text file"""
     with open(txt_path, 'r') as f:
         txt = f.read()
     count = txt.count(search_string)

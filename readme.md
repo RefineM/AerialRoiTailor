@@ -1,103 +1,139 @@
-<h1 align="center">
-AerialROITailor
-</h1>
-<h3 align="center">
-Generate virtual cameras of ROI from aerial oblique imagery
-</h3>
+# AerialRoiTailor
+### Generate virtual cameras of ROI from aerial oblique imagery
 
-![流程](assets/frame.png)
-从大型航空倾斜摄影数据集中，选择感兴趣区域 (ROI)，生成ROI数据集和相应的虚拟相机参数，以便用于区域性的场景建模。
-符合现有的NeRF、Instant-NGP等模型的输入要求。
-## 原理
-### 1.可见性筛选  
-* 通过比较相机朝向 $c_o$ 和相机中心c同兴趣区世界点p的连线 $c_p$ 之间的角度 $\beta$ 和相机视场角 $fov$ 的大小，来确定兴趣区的世界点是否在图像中可见。
-  $$\beta = \frac{c\_p* c\_o}{||c\_p||* ||c\_o||}$$
-  $$fov = arctan\frac{sensor\_size}{2focal}$$
-  $$if \beta < fov/2 => visiable$$
-* 如果感兴趣区域世界点在图像中的可见比例超过预设的阈值，则认为该图像是我们需要的，就将其筛选出来。
-### 2.基于包围盒的裁剪
-* 在经过可见性筛选后，为了专注于ROI，减少其他无关部分的干扰，基于像点-世界点之间的关系，通过相机的外部（w2c）和内部（c2p）参数，计算可见部分的边界框，并根据边界框裁剪图像。对影像的缩放和裁剪操作，会改变相机的内参。缩放影响的是像主点坐标和焦距，裁剪只影响像主点坐标。并采用如下图所示的策略，确保裁剪后的图像具有相同的尺寸。
-![裁剪](assets/crop.png)
-### 3.生成相机参数文件 (.json)
-* 参考了nerf_studio和instant_ngp的输入数据格式，支持多相机。
+---
+
+## Overview
+![frame](assets/frame.png)
+Select regions of interest (ROI) from large aerial oblique image datasets, and generate corresponding ROI datasets and virtual camera parameters for regional scene modeling. The output is compatible with input requirements for existing models like NeRF, Instant-NGP, and others.
+
+### 1. Visibility Filtering
+
+* The visibility of world points in the region of interest (ROI) is determined by comparing the angle $\beta$ between the camera orientation $c_o$ and the line from the camera center $c$ to the world point $p$, against the camera’s field of view (FoV).
+  $$ 
+  \beta = \frac{c_p \cdot c_o}{||c_p|| \cdot c_o||}
+  $$
+  $$
+  fov = \arctan\left(\frac{sensor\_size}{2 \cdot focal}\right)
+  $$
+  $$
+  if \ \beta < \frac{fov}{2} \Rightarrow visible
+  $$
+
+* If the visible portion of the ROI world point in the image exceeds a preset threshold, the image is considered valid and selected for further processing.
+
+### 2. Bounding Box-Based Cropping
+
+* After visibility filtering, to focus on the ROI and reduce distractions from irrelevant areas, the visible portion’s bounding box is computed based on the camera’s external (w2c) and internal (c2p) parameters, and the image is cropped accordingly. Scaling and cropping operations will alter the camera's intrinsic parameters. Scaling affects the principal point and focal length, while cropping only affects the principal point. The strategy below ensures the cropped image retains the same dimensions.
+![Cropping](assets/crop.png)
+
+### 3. Generate Camera Parameter File (.json)
+
+* The input data format is inspired by NeRF Studio and Instant-NGP, supporting multi-camera setups.
 ```
 {
   "camera_mode": ,
   "camera_orientation": ,
   "aabb_scale": ,
   "aabb_range":,
-  "sphere_center":，
-  "sphere_radius":，
+  "sphere_center":,
+  "sphere_radius":,
   "frames": [
-  {
-    "file_path": ,
-    "intrinsic_matrix": ,
-    "transform_matrix": ,
-    "w": ,
-    "h": 
-  }, 
-  ...
- }
+    {
+      "file_path": ,
+      "intrinsic_matrix": ,
+      "transform_matrix": ,
+      "w": ,
+      "h": 
+    }, 
+    ...
+  ]
+}
 ```
-## 使用方法
-### 0.环境配置
+
+---
+
+## Usage
+
+### 0. Environment Setup
+
 ```
 conda env create -f environment.yaml
 ```
-### 1.基于Context Capture制作数据集
-* 下载大型航空倾斜摄影数据集。
-  示例：EuroSDR Benchmark for Multi-Platform Photogrammetry published by ISPRS。
-  [链接](https://www2.isprs.org/commissions/comm2/icwg-2-1a/benchmark_main/)
-* 在Context Capture Master中创建新项目，加载数据集并执行空三解算（如果数据质量很好，可以跳过刺点）。
-* 导出相机参数文件（AT.xml）和去畸变的图像。在导出空三解算后的相机参数时，注意选择坐标轴朝向为`opencv`格式（即`xyz-RDF`）。在空三解算后导出的相机参数文件中，旋转矩阵是w2c矩阵，相机中心坐标是相机在世界坐标系中的坐标。
-* 创建 reconstruction项目，选择感兴趣区域，生成mesh文件（Model.obj）和元数据文件（metadata.xml）。
-### 2.按照格式组织数据
-* 在本项目的目录中创建一个`dataset`文件夹，并按照如下格式组织：
+
+### 1. Dataset Creation with Context Capture
+
+![CC](assets/cc_process.png)
+
+* Download a large-scale aerial oblique imagery dataset. Example: EuroSDR Benchmark for Multi-Platform Photogrammetry, published by ISPRS.  
+  [Link](https://www2.isprs.org/commissions/comm2/icwg-2-1a/benchmark_main/)
+
+* In Context Capture Master, create a new project, load the dataset, and run the photogrammetric processing (if the data quality is high, point cloud cleaning can be skipped).
+
+* Export the camera parameters (AT.xml) and undistorted images. When exporting the camera parameters after photogrammetric processing, select the axis orientation as `opencv` format (i.e., `xyz-RDF`). In the exported camera parameters, the rotation matrix is the w2c matrix, and the camera center corresponds to the camera's position in the world coordinate system.
+
+* Create a reconstruction project, select the region of interest, and generate the mesh file (Model.obj) and metadata file (metadata.xml).
+
+### 2. Organize Data in the Correct Format
+
+* Create a `dataset` folder in the project directory and organize the data as follows:
+
 ```
 dataset
 |_ dataset_01
-   |_ images        // 存放可见影像(empty)
-   |_ images_crop   // 存放按照ROI裁剪后的可见影像(empty)
-   |_ AT.xml        // 相机空三文件
-   |_ metadata.xml  // 感兴趣区域元数据文件
-   |_ Model.obj     // 感兴趣区域mesh文件
+   |_ images        // Store visible images (empty)
+   |_ images_crop   // Store cropped visible images based on ROI (empty)
+   |_ AT.xml        // Camera parameter file from photogrammetry
+   |_ metadata.xml  // Metadata for the region of interest
+   |_ Model.obj     // Mesh file for the region of interest
 ```
-### 3.参数设置
-在`config.py`中设置：
-#### 数据集相关
-* 数据集路径 `dataset_dir`
-#### 输出影像相关
-* 是否按照包围盒裁剪图像 `if_mask_crop`。如果是则输出裁剪后的影像，否则输出包含ROI的原始影像。
-* 指定裁剪后统一的图像尺寸 `tar_size_w` `tar_size_h`。
-#### 虚拟相机参数相关
-* 是否对场景进行标准化 `if_standardization`。如果是，则会对整个场景进行平移和缩放：将坐标原点移动到mesh的几何中心；将整个场景缩放到一个目标球体之内。
-* 目标球体半径 `tar_radius`。
 
-### 4.运行
-* 完成数据集制作和参数设置后，运行`run.py`。  
-* 若查看处理后的场景可视化结果，运行`scene_viser.py`。
+### 3. Configuration
 
-### 5.预期结果
+Set the parameters in `config.py`:
+
+#### Dataset Related
+* Dataset path `dataset_dir`
+
+#### Output Image Settings
+* Crop images based on the bounding box `if_mask_crop`. If true, cropped images will be output, otherwise the original images containing the ROI will be used.
+* Set unified image dimensions after cropping: `tar_size_w`, `tar_size_h`.
+
+#### Virtual Camera Parameters
+* Standardize the scene `if_standardization`. If true, the entire scene will be translated and scaled: the coordinate origin is moved to the mesh’s geometric center, and the scene is scaled within a target sphere.
+* Target sphere radius `tar_radius`.
+
+### 4. Run
+
+* After dataset creation and parameter configuration, run `run.py`.  
+* To visualize the processed scene, run `scene_viser.py`.
+
+### 5. Expected Output
+
 ```
 dataset
 |_ dataset_01
-   |_ images        // 存放可见影像
-   |_ images_crop   // 存放按照ROI裁剪后的可见影像
-   |_ AT.xml        // 相机空三文件
-   |_ metadata.xml  // 感兴趣区域元数据文件
-   |_ Model.obj     // 感兴趣区域mesh文件
-   |_ transforms.json   // 相机参数文件
-   |_ Model_resized.obj  // 标准化后的mesh文件
+   |_ images        // Store visible images
+   |_ images_crop   // Store cropped visible images based on ROI
+   |_ AT.xml        // Camera parameter file
+   |_ metadata.xml  // Metadata for the region of interest
+   |_ Model.obj     // Mesh file for the region of interest
+   |_ transforms.json   // Camera parameter file
+   |_ Model_resized.obj  // Standardized mesh file
 ```
-## 测试
-* 数据集：  
-ISPRS Penta-Cam-Centre(8bit)
-* 参数设置：  
-`if_mask_crop`=True, `if_standardization`=True, `tar_size_w`=1200, `tar_size_h`=1000，`tar_radius`=1.0
-* 经CC三维重建导出的兴趣区mesh： ![图像](assets/roi_mesh.jpg)
-* 筛选出包含感兴趣区域的影像（8176 * 6132）![图像](assets/selected_images.jpg)
-* 依据包围盒将该影像中的ROI裁剪出来，输出新影像（1200 * 1000） ![图像](assets/croped_images.jpg)
-* 同时获取新图像的相机参数：
+
+---
+
+## Testing
+
+* Dataset:  
+ISPRS Penta-Cam-Centre (8bit)
+* Parameter Settings:  
+`if_mask_crop`=True, `if_standardization`=True, `tar_size_w`=1200, `tar_size_h`=1000, `tar_radius`=1.0
+* ROI mesh exported from CC 3D reconstruction: ![Image](assets/roi_mesh.jpg)
+* Selected images containing the region of interest (8176 * 6132): ![Image](assets/selected_images.jpg)
+* Cropped ROI from the image using the bounding box, with new image dimensions (1200 * 1000): ![Image](assets/croped_images.jpg)
+* Camera parameters for the new image:
 ```
 {
   "camera_mode": "Perspective",
@@ -130,17 +166,26 @@ ISPRS Penta-Cam-Centre(8bit)
     ...
 }
 ```
-* 可视化处理后的场景：红色为相机视锥体，蓝色为场景包围球。
- ![图像](assets/vis.jpg)
 
-## 待办
-- [x] 支持 自动识别单相机/多相机
-- [x] 支持 场景可视化
-- [x] 优化 代码结构
-- [ ] 支持 处理畸变影像，不再用CC导出
+* Visualize the processed scene: red indicates the camera frustum, and blue indicates the scene bounding sphere.
+ ![Image](assets/vis.jpg)
 
-## 参考
-感谢以下项目：
-* 数据集: [链接](https://www2.isprs.org/commissions/comm2/icwg-2-1a/benchmark_main/)
-* 相机可视化: [NeRF++](https://github.com/Kai-46/nerfplusplus)
-* json格式：[nerfstudio](https://github.com/nerfstudio-project/nerfstudio) [Neuralangelo](https://github.com/NVlabs/neuralangelo) 
+---
+
+## To Do
+
+- [x] Support automatic detection of single/multi-camera setups
+- [x] Support scene visualization
+- [x] Optimize code structure
+- [ ] Support handling distorted images without using CC export
+- [ ] Support exporting masks 
+
+---
+
+## Acknowledgments
+
+Special thanks to the following projects:
+
+* Dataset: [Link](https://www2.isprs.org/commissions/comm2/icwg-2-1a/benchmark_main/)
+* Camera Visualization: [NeRF++](https://github.com/Kai-46/nerfplusplus)
+* JSON Format: [nerfstudio](https://github.com/nerfstudio-project/nerfstudio), [Neuralangelo](https://github.com/NVlabs/neuralangelo)

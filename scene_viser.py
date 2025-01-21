@@ -8,22 +8,21 @@
 import open3d as o3d
 import json
 import numpy as np
+from config import BaseConfig
 
 
 def get_camera_frustum(img_size, k, c2w, frustum_length=1.0):
     """
-    定义视锥体的顶点、边、颜色
     ref: nerf++
     """
     color = [1, 0, 0]
-    # 根据视锥体的长度，调整影像大小
+    # set image size according to frustum length
     W, H = img_size
     hfov = np.rad2deg(np.arctan(W / 2. / k[0, 0]) * 2.)
     vfov = np.rad2deg(np.arctan(H / 2. / k[1, 1]) * 2.)
     half_w = frustum_length * np.tan(np.deg2rad(hfov / 2.))
     half_h = frustum_length * np.tan(np.deg2rad(vfov / 2.))
-    # 定义视锥体的5个顶点、8条边
-    # 在相机坐标系下：opencv格式（x->right, y->down, z->forward）
+    # define 5 vertices and 8 edges of a frustum (camera coordinates in opencv)
     frustum_points = np.array([[0., 0., 0.],                          # frustum origin
                                [-half_w, -half_h, frustum_length],    # top-left images corner
                                [half_w, -half_h, frustum_length],     # top-right images corner
@@ -31,15 +30,14 @@ def get_camera_frustum(img_size, k, c2w, frustum_length=1.0):
                                [-half_w, half_h, frustum_length]])    # bottom-left images corner
     frustum_lines = np.array([[0, i] for i in range(1, 5)] + [[i, (i+1)] for i in range(1, 4)] + [[4, 1]])
     frustum_colors = np.tile(np.array(color).reshape((1, 3)), (frustum_lines.shape[0], 1))
-    # 在世界坐标系下：
-    frustum_points = np.dot(np.hstack((frustum_points, np.ones_like(frustum_points[:, 0:1]))), c2w.T)  # 左乘c2w转为世界坐标
-    frustum_points = frustum_points[:, :3] / frustum_points[:, 3:4]  # 齐次转非齐次
+    # transform frustum points to world coordinates
+    frustum_points = np.dot(np.hstack((frustum_points, np.ones_like(frustum_points[:, 0:1]))), c2w.T)  
+    frustum_points = frustum_points[:, :3] / frustum_points[:, 3:4]  
     return frustum_points, frustum_lines, frustum_colors
 
 
 def frustums2lineset(frustums):
     """
-    创建一个构成视锥体的点线集合，便于在open3d中显示
     ref: nerf++
     """
     N = len(frustums)
@@ -59,7 +57,6 @@ def frustums2lineset(frustums):
 
 
 def read_json(json_path):
-    """从json中读取相机的位姿"""
     with open(json_path, 'r') as f:
         meta = json.load(f)
 
@@ -91,24 +88,21 @@ def visualize_scene(
         camera_size=2,
         geometry_file=None,
         geometry_type='mesh'):
-    """可视化场景和相机"""
-
-    # 场景包围球（前景球，球心为原点，半径为1）
-    # 首先创建构成场景包围球的三角mesh，然后保留这个三角mesh的边，达到透明效果
+    """visualize scene with camera frustum and scene geometry"""
     sphere = o3d.geometry.TriangleMesh.create_sphere(radius=sphere_radius, resolution=10)
     sphere = o3d.geometry.LineSet.create_from_triangle_mesh(sphere)
     sphere.paint_uniform_color((0, 0, 1))
-    # 坐标原点和坐标轴
+
     coord_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(size=0.5, origin=[0., 0., 0.])
-    # 包围盒
+
     bbox = np.array(camera_meta["bbox"])  # np.array(3,2)
     min_bound = bbox[:, 0].tolist()  # list(3,1)
     max_bound = bbox[:, 1].tolist()  # list(3,1)
     bbox_line = o3d.geometry.AxisAlignedBoundingBox(min_bound, max_bound)
-    bbox_line.color = (1, 0, 0)
-    # 需要绘制的几何图形
+    bbox_line.color = (1, 0, 0) 
+
     draw = [sphere, coord_frame, bbox_line]
-    # 相机位姿
+
     c2w = np.array(camera_meta["cam_poses"])  # np.array(n,4,4)
     k = np.array(camera_meta["cam_intrinsic"])  # np.array(n,3,3)
 
@@ -121,7 +115,6 @@ def visualize_scene(
         cameras = frustums2lineset(frustums)
         draw.append(cameras)
 
-    # 加载场景点云或mesh
     if geometry_file is not None:
         if geometry_type == 'mesh':
             geometry = o3d.io.read_triangle_mesh(geometry_file)
@@ -136,9 +129,9 @@ def visualize_scene(
 
 
 if __name__ == '__main__':
-    dataset_dir = r'dataset/isprs_01'
-    json_path = dataset_dir + r"\transforms.json"
-    geometry_file = dataset_dir + r"\Model_resized.obj"
+    cfg = BaseConfig()
+    json_path = cfg.dataset_dir + r"\transforms.json"
+    geometry_file = cfg.dataset_dir + r"\Model_resized.obj"
 
     meta = read_json(json_path)
     visualize_scene(camera_meta=meta, geometry_file=geometry_file)

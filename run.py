@@ -10,56 +10,46 @@ import numpy as np
 from PIL import Image
 from camera_parser import CameraReader
 from mesh_parser import SceneReader
-from utils import get_scene_box, get_use_img, get_required_img_path, move_images
+from utils import get_scene_box, select_target_images, get_target_img_path, move_images
 from tqdm import tqdm
 from config import BaseConfig
 
 
 def pipeline():
     cfg = BaseConfig()
-    """参数设置"""
-    # CC空三解算导出的整个数据集的相机内外参文件
+    """config"""
+    # the paths of at file, obj file and mesh meta file exported by CC
     xml_path = cfg.dataset_dir + r"\AT.xml"
-    # CC三维建模导出的感兴趣区域的mesh路径
     obj_path = cfg.dataset_dir + r"\Model.obj"
-    # CC三维建模导出的感兴趣区域的mesh元数据文件
     mesh_xml_path = cfg.dataset_dir + r"\metadata.xml"
-
-    # 将包含感兴趣区域的影像移动到的目标路径
+    # the target folder to save the images that cover the ROI
     tar_folder = cfg.dataset_dir + r"\images"
-    # 保存包含感兴趣区域的影像id的文本文件路径
+    # the path of the text file to save the index of images that cover the ROI
     use_id_path = cfg.dataset_dir + r"\required_img_id.txt"
-    # 影像裁剪后路径
+    # the path to save the cropped images
     crop_folder = cfg.dataset_dir + r"\images_crop"
-
-    # 感兴趣区域影像的相机内外参json文件路径
+    # the path of the json file to save the intrinsic and extrinsic parameters of the virtual cameras
     json_file_path = cfg.dataset_dir + r".\transforms.json"
-    # 将mesh顶点坐标中心化、规范化后输出路径
+    # the path to save the resized obj file
     resized_obj_path = cfg.dataset_dir + r"\Model_resized.obj"
 
-    """声明类的实例"""
-    # 相机参数解析类
+    """get camera and scene information"""
     cam_info = CameraReader(xml_path)
-    # 场景参数解析类
     scene_info = SceneReader(obj_path, mesh_xml_path)
-
-    """获取影像的元数据信息"""
     cam_in = cam_info.get_cam_intrinsic()
     cam_ex = cam_info.get_cam_extrinsic()
     ori_img_path = cam_info.get_image_path()
-
-    """获取场景信息"""
     p_world = scene_info.get_3d_points()
     scene = get_scene_box(p_world, cfg.tar_radius)
     scene_info.centered_and_scaled_3d_points(resized_obj_path)
 
-    """获取感兴趣影像id"""
+    """get the index of target images that cover the ROI"""
     if os.path.isfile(use_id_path):
         use_img_id = []
         for line in open(use_id_path, "r"):
             use_img_id.append(int(line.split('\n')[0]))
     else:
-        use_img_id = get_use_img(cam_ex["rot_c2w"], cam_ex["cam_xyz"],
+        use_img_id = select_target_images(cam_ex["rot_c2w"], cam_ex["cam_xyz"],
                                  p_world,
                                  cam_in['cam_fov'] / 2,
                                  cover_ratio=0.05)
@@ -68,11 +58,11 @@ def pipeline():
             f.write(str(i) + '\n')
         f.close()
 
-    """移动感兴趣影像"""
-    old_path, new_path = get_required_img_path(ori_img_path, use_img_id, tar_folder)
-    # move_images(old_path, new_path)
+    """move target images to target folder"""
+    old_path, new_path = get_target_img_path(ori_img_path, use_img_id, tar_folder)
+    move_images(old_path, new_path)
 
-    """获取感兴趣影像的元数据"""
+    """get metadata of the target images"""
     file_path = []
     for i in range(len(new_path)):
         file_path.append("images/" + new_path[i].split("\\")[-1])
@@ -82,7 +72,7 @@ def pipeline():
     w = np.array(cam_in["imgs_w"])[use_img_id]
     h = np.array(cam_in["imgs_h"])[use_img_id]
 
-    """(可选)获取mask, 将感兴趣区域从影像中裁剪出来"""
+    """crop the ROI from images"""
     if cfg.if_mask_crop:
        crop_file_path = []
        print("crop images")
@@ -92,30 +82,28 @@ def pipeline():
            trans = transform_matrix[img_idx, :-1, 3].reshape(1, 3)  # (3)
            trans = np.tile(trans, reps=(p_world.shape[0], 1))  # (N 3)
 
-           # 求出世界点的像素坐标
+           # get the pixel coordinate of mesh vertice
            p_cam = (p_world - trans) @ w2c.T  # (N,3) @ (3,3) - (N,3)
            p_pixel = p_cam @ c2p.T  # (N,3) @ (3,3)
            p_pixel[:, 0] /= p_cam[:, -1]  # np(N,3)
            p_pixel[:, 1] /= p_cam[:, -1]  # np(N,3)
            p_pixel = p_pixel[:, :-1]  # np(N,2)
 
-           # 掩膜包围盒
+           # get bbox of ROI
            bbox_min = np.clip(np.min(p_pixel, axis=0), a_min=[0, 0], a_max=[w[img_idx]-1, h[img_idx]-1])
            bbox_max = np.clip(np.max(p_pixel, axis=0), a_min=[0, 0], a_max=[w[img_idx]-1, h[img_idx]-1])
            bbox_min_x, bbox_min_y = int(bbox_min[0]), int(bbox_min[1])
            bbox_max_x, bbox_max_y = int(bbox_max[0]), int(bbox_max[1])
            box = (bbox_min_x, bbox_min_y, bbox_max_x, bbox_max_y)
 
-           # 判断包围盒
+           # make sure the size of ROI of each image is the same
            if bbox_min_x + cfg.tar_size_w >= w[img_idx]:
               bbox_min_x = w[img_idx] - cfg.tar_size_w
-
            if bbox_min_y + cfg.tar_size_h >= h[img_idx]:
               bbox_min_y = h[img_idx] - cfg.tar_size_h
-
            box = (bbox_min_x, bbox_min_y, bbox_min_x + cfg.tar_size_w, bbox_min_y + cfg.tar_size_h)
 
-           # 裁剪该影像
+           # crop image according to the bbox
            ori_path = os.path.join(cfg.dataset_dir, file_path[img_idx])
            img = Image.open(ori_path)
            region = img.crop(box)
@@ -123,30 +111,29 @@ def pipeline():
            crop_file_path.append(save_path)
            region.save(save_path)
 
-           # 裁剪改了主点的cx、cy
+           # update the principal points (cx,cy)
            intrinsic_matrix[img_idx, 0, 2] -= bbox_min_x
            intrinsic_matrix[img_idx, 1, 2] -= bbox_min_y
-
-           # 裁剪改了图像大小
+           # update the size of images
            w[img_idx] = cfg.tar_size_w
            h[img_idx] = cfg.tar_size_h
 
        file_path = crop_file_path
 
-    """(可选)场景中心化、规范化"""
+    """centered and scaled the scene"""
     if cfg.if_standardization:
-        # c2w矩阵中的平移量需要平移和缩放
+        # update the trans vector of c2w matrix
         transform_matrix[:, :3, 3] -= scene["center"].flatten()
         transform_matrix[:, :3, 3] *= scene["scale"]
-        # 场景的包围盒需要平移和缩放
+        # update bounding box
         scene["bounding_box"] -= scene["center"]
         scene["bounding_box"] *= scene["scale"]
-        # 场景中心变为[0, 0, 0]
+        # update center to [0, 0, 0]
         scene["center"] = np.array([0, 0, 0])
-        # 场景半径变为指定半径
+        # update radius of the scene to target radius
         scene["radius"] = cfg.tar_radius
 
-    """输出配置文件"""
+    """save json"""
     out = {
         "camera_mode": cam_in["cam_type"],
         "camera_orientation": cam_in["cam_orient"],
@@ -159,7 +146,6 @@ def pipeline():
 
     for i in range(len(new_path)):
         frame = {
-            # 根据具体的任务设置不同的路径
             "file_path": "images_crop/" + file_path[i].split("\\")[-1],
             "intrinsic_matrix": intrinsic_matrix[i].tolist(),
             "transform_matrix": transform_matrix[i].tolist(),

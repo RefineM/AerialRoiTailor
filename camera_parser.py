@@ -13,7 +13,7 @@ from utils import count_str_occurrences
 
 class CameraReader(object):
     def __init__(self, xml_path):
-        """从ContextCapture格式的xml文件中读取影像元数据信息"""
+        """get metadata from at.xml exported by CC"""
         self.xml_path = xml_path
         with open(self.xml_path, 'r') as f:
             self.xml = xmltodict.parse(f.read())
@@ -22,7 +22,8 @@ class CameraReader(object):
         self.group_num = count_str_occurrences(self.xml_path, '<Photogroup>')
 
     def get_image_path(self):
-        """获取原始像片所在位置
+        """
+        get the original paths of images
         :return: img_path list[img_num]
         """
         img_path = []
@@ -37,7 +38,7 @@ class CameraReader(object):
 
     @staticmethod
     def get_group_intrinsic(group):
-        """获取单个photo_group的内参"""
+        """get intrinsic of the photo_group"""
         # w,h (unit:pixel)
         w = int(group['ImageDimensions']['Width'])
         h = int(group['ImageDimensions']['Height'])
@@ -73,7 +74,7 @@ class CameraReader(object):
         return w, h, k, fov
 
     def get_cam_intrinsic(self):
-        """获取所有像片的内参"""
+        """get intrinsic of all photo_groups"""
         intrinsics = []
         fovs = []
         imgs_w = []
@@ -117,12 +118,12 @@ class CameraReader(object):
     @ staticmethod
     def get_photo_extrinsic(photo):
         """
-        获取单个像片的外参
+        get extrinsic of the photo_group
         :return:
-        rot_w2c/旋转矩阵/np.array(3,3)
-        rot_c2w/旋转矩阵/np.array(3,3)
-        cam_center_in_world/相机中心在世界坐标系的坐标/np.array(3)
-        cam_extrinsic/ c2w opencv /np.array(4,4)
+        rot_w2c/np.array(3,3)
+        rot_c2w/np.array(3,3)
+        cam_center_in_world/np.array(3)
+        cam_extrinsic/c2w opencv/np.array(4,4)
         """
         r00 = float(photo['Pose']['Rotation']['M_00'])
         r01 = float(photo['Pose']['Rotation']['M_01'])
@@ -150,12 +151,12 @@ class CameraReader(object):
 
     def get_cam_extrinsic(self):
         """
-        获取所有相片的外参
+        get extrinsic of all photo_groups
         :return:
-        rot_w2c/旋转矩阵/np.array(img_num,3,3)
-        rot_c2w/旋转矩阵/np.array(img_num,3,3)
-        cam_center_in_world/相机中心在世界坐标系的坐标/np.array(img_num,3)
-        cam_extrinsic/ c2w opencv /np.array(img_num,4,4)
+        rot_w2c/np.array(img_num,3,3)
+        rot_c2w/np.array(img_num,3,3)
+        cam_center_in_world/np.array(img_num,3)
+        cam_extrinsic/c2w opencv/np.array(img_num,4,4)
         """
         w2c_rot_all = []
         c2w_rot_all = []
