@@ -1,8 +1,6 @@
 # AerialRoiTailor
 ### Generate virtual cameras of ROI from aerial oblique imagery
 
----
-
 ## Overview
 ![frame](assets/frame.png)
 Select regions of interest (ROI) from large aerial oblique image datasets, and generate corresponding ROI datasets and virtual camera parameters for regional scene modeling. The output is compatible with input requirements for existing models like NeRF, Instant-NGP, and others.
@@ -10,15 +8,9 @@ Select regions of interest (ROI) from large aerial oblique image datasets, and g
 ### 1. Visibility Filtering
 
 * The visibility of world points in the region of interest (ROI) is determined by comparing the angle $\beta$ between the camera orientation $c_o$ and the line from the camera center $c$ to the world point $p$, against the camera’s field of view (FoV).
-  $$ 
-  \beta = \frac{c_p \cdot c_o}{||c_p|| \cdot c_o||}
-  $$
-  $$
-  fov = \arctan\left(\frac{sensor\_size}{2 \cdot focal}\right)
-  $$
-  $$
-  if \ \beta < \frac{fov}{2} \Rightarrow visible
-  $$
+  $$\beta = \frac{c_p \cdot c_o}{|c_p| \cdot |c_o|}$$  
+  $$fov = \arctan\left(\frac{sensor\_size}{2 \cdot focal}\right)$$  
+  $$if \ \beta < \frac{fov}{2} \Rightarrow visible$$  
 
 * If the visible portion of the ROI world point in the image exceeds a preset threshold, the image is considered valid and selected for further processing.
 
@@ -50,8 +42,6 @@ Select regions of interest (ROI) from large aerial oblique image datasets, and g
   ]
 }
 ```
-
----
 
 ## Usage
 
@@ -122,8 +112,6 @@ dataset
    |_ Model_resized.obj  // Standardized mesh file
 ```
 
----
-
 ## Testing
 
 * Dataset:  
@@ -170,7 +158,6 @@ ISPRS Penta-Cam-Centre (8bit)
 * Visualize the processed scene: red indicates the camera frustum, and blue indicates the scene bounding sphere.
  ![Image](assets/vis.jpg)
 
----
 
 ## To Do
 
@@ -180,7 +167,6 @@ ISPRS Penta-Cam-Centre (8bit)
 - [ ] Support handling distorted images without using CC export
 - [ ] Support exporting masks 
 
----
 
 ## Acknowledgments
 
