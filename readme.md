@@ -7,7 +7,8 @@ Select regions of interest (ROI) from large aerial oblique image datasets, and g
 
 ### 1. Visibility Filtering
 
-* The visibility of world points in the region of interest (ROI) is determined by comparing the angle $\beta$ between the camera orientation $c_o$ and the line from the camera center $c$ to the world point $p$, against the camera’s field of view (FoV).
+* The visibility of world points in the region of interest (ROI) is determined by comparing the angle $\beta$ between the camera orientation $c_o$ and the line from the camera center $c$ to the world point $p$, against the camera’s field of view (FoV).  
+  
   $$\beta = \frac{c_p \cdot c_o}{|c_p| \cdot |c_o|}$$  
   $$fov = \arctan\left(\frac{sensor\_size}{2 \cdot focal}\right)$$  
   $$if \ \beta < \frac{fov}{2} \Rightarrow visible$$  
